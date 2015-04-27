@@ -43,10 +43,12 @@ class Keyring_Reddit_Importer extends Keyring_Importer_Base {
 	function build_request_url() {
 		$this->service->maybe_refresh_token();
 		
-		$url = "https://oauth.reddit.com/user/cfinke/overview.json";
+		$username = $this->service->get_token()->get_display();
 
-		if ( $this->auto_import ) {
-			// Get most recent checkin we've imported (if any), and its date so that we can get new ones since then
+		$url = "https://oauth.reddit.com/user/" . $username . "/overview.json";
+
+		if ( $this->get_option( 'auto_import' ) ) {
+			// Get most recent post/comment we've imported (if any), and its date so that we can get new ones since then
 			$latest = get_posts( array(
 				'numberposts' => 1,
 				'orderby'     => 'date',
@@ -62,11 +64,11 @@ class Keyring_Reddit_Importer extends Keyring_Importer_Base {
 			// If we have already imported some, then start since the most recent
 			if ( $latest ) {
 				$raw_data = get_post_meta( $latest[0]->ID, 'raw_import_data', true );
-				$url = add_query_arg( 'before', $raw_data->data->name, $url );
+				$url = add_query_arg( 'before', rawurlencode( $raw_data->data->name ), $url );
 			}
 		} else {
 			if ( $this->get_option( 'after' ) ) {
-				$url = add_query_arg( 'after', $this->get_option( 'after' ), $url );
+				$url = add_query_arg( 'after', rawurlencode( $this->get_option( 'after' ) ), $url );
 				$url = add_query_arg( 'count', 0, $url );
 			}
 		}
@@ -96,7 +98,11 @@ class Keyring_Reddit_Importer extends Keyring_Importer_Base {
 				case 't1':
 					$post_title = sprintf( __( 'Commented on %s', 'keyring-reddit' ), $post->data->link_title );
 					$post_content = html_entity_decode( $post->data->body_html );
-					$reddit_permalink = 'http://reddit.com/r/' . $post->data->subreddit . '/' . array_pop( explode( '_', $post->data->link_id ) ) . '/';
+
+					$link_parts = explode( '_', $post->data->link_id );
+					$link_id = array_pop( $link_parts );
+
+					$reddit_permalink = 'http://reddit.com/r/' . $post->data->subreddit . '/' . $link_id . '/';
 				break;
 				case 't3':
 					$post_title = $post->data->title;
@@ -193,7 +199,7 @@ class Keyring_Reddit_Importer extends Keyring_Importer_Base {
 				do_action( 'keyring_post_imported', $post_id, static::SLUG, $post );
 			}
 		}
-		
+
 		$this->posts = array();
 
 		// Return, so that the handler can output info (or update DB, or whatever)
